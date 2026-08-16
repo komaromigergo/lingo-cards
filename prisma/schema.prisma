@@ -1,0 +1,137 @@
+// ============================================================================
+// Lingo Cards — Prisma Schema
+// Default datasource: SQLite (swap provider to "postgresql" for production)
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" // change to "postgresql" and set DATABASE_URL for prod
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// ENUMS
+// ----------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  USER
+}
+
+/// Import source, kept for auditing / re-running imports
+enum ImportSource {
+  NOTEBOOK   // Option A: two-column vocabulary notebook photos
+  TEXTBOOK   // Option B: green-underline textbook photos
+  MANUAL
+}
+
+/// Per-card mastery status inside a study session / long-term tracking
+enum CardStatus {
+  NEW
+  LEARNING   // swiped left / marked "still learning"
+  MASTERED   // swiped right / marked "mastered"
+}
+
+// ----------------------------------------------------------------------------
+// MODELS
+// ----------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  folders      Folder[]
+  studyLogs    StudyLog[]
+
+  @@map("users")
+}
+
+model Folder {
+  id        String   @id @default(cuid())
+  name      String
+  color     String?  @default("#6366f1")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId   String
+
+  decks     Deck[]
+
+  @@index([ownerId])
+  @@map("folders")
+}
+
+model Deck {
+  id             String   @id @default(cuid())
+  title          String
+  description    String?
+  // Languages used for the two faces of every card in this deck, e.g. "de" / "hu"
+  frontLanguage  String   @default("de")
+  backLanguage   String   @default("hu")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  folder         Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  folderId       String
+
+  cards          Card[]
+  studyLogs      StudyLog[]
+
+  @@index([folderId])
+  @@map("decks")
+}
+
+model Card {
+  id           String       @id @default(cuid())
+  front        String       // foreign word/phrase
+  back         String       // translation (e.g. Hungarian)
+  language     String       // language code of `front`, e.g. "de", "en"
+  notes        String?
+  imageUrl     String?      // optional source snippet / illustration
+
+  status       CardStatus   @default(NEW)
+  timesCorrect Int          @default(0)
+  timesWrong   Int          @default(0)
+  lastReviewed DateTime?
+
+  importSource ImportSource @default(MANUAL)
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  deck         Deck         @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  deckId       String
+
+  @@index([deckId])
+  @@map("cards")
+}
+
+/// Records a completed (or in-progress) study session for analytics /
+/// "repeat only missed cards" continuity across reloads.
+model StudyLog {
+  id            String   @id @default(cuid())
+  masteredCount Int      @default(0)
+  learningCount Int      @default(0)
+  totalCards    Int      @default(0)
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+
+  deck          Deck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  deckId        String
+
+  @@index([userId])
+  @@index([deckId])
+  @@map("study_logs")
+}
