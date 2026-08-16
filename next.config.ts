@@ -1,14 +1,4 @@
-import type { NextConfig } from "next";
+/** @type {import('next').NextConfig} */
+const nextConfig = {};
 
-const nextConfig: NextConfig = {
-  experimental: {
-    serverActions: {
-      bodySizeLimit: "15mb", // allow multi-photo uploads for Gemini import
-    },
-  },
-  images: {
-    remotePatterns: [{ protocol: "https", hostname: "**" }],
-  },
-};
-
-export default nextConfig;
+module.exports = nextConfig;
