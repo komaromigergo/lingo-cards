@@ -62,4 +62,4 @@ export function assertAdmin(role: string | undefined) {
   if (role !== "ADMIN") {
     throw new Error("Forbidden: admin access required");
   }
-}
+} 
