@@ -26,12 +26,7 @@ export const authOptions: NextAuthOptions = {
 
         if (!user) throw new Error("Invalid email or password");
 
-        // Ideiglenes biztos belépés a számodra
-        const isOwner = credentials.email.toLowerCase().trim() === 'komaromigeri11@gmail.com';
-        const isValid = isOwner 
-          ? credentials.password === 'ChangeMe123!' 
-          : await bcrypt.compare(credentials.password, user.passwordHash);
-
+        const isValid = await bcrypt.compare(credentials.password, user.passwordHash);
         if (!isValid) throw new Error("Invalid email or password");
 
         return {
