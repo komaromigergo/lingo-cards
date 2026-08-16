@@ -8,9 +8,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql" // change to "postgresql" and set DATABASE_URL for prod
-  url      = env("DATABASE_URL")
-}
+  provider  = "postgresql"
+  // Neon: use the POOLED connection string here (works well with serverless functions)
+  url       = env("DATABASE_URL")
+  // Neon: use the DIRECT (non-pooled) connection string here — required for migrations
+  directUrl = env("DIRECT_URL")
 }
 
 // ----------------------------------------------------------------------------
