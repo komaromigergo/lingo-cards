@@ -33,6 +33,7 @@ interface DeckInfo {
   description: string | null;
   frontLanguage: string;
   backLanguage: string;
+  folderId: string;
 }
 
 const statusVariant = {
@@ -99,7 +100,7 @@ export default function DeckPage() {
     <div className="min-h-screen">
       <Navbar />
       <main className="container py-8">
-        <Link href={`/folder`} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+        <Link href={deck ? `/folder/${deck.folderId}` : "/dashboard"} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
           Back
         </Link>
