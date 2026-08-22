@@ -89,8 +89,11 @@ export default function LoginPage() {
           </CardContent>
         </Card>
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
+                <p className="mt-6 text-center text-xs text-muted-foreground">
           Don&apos;t have an account? Ask your administrator to create one for you.
+        </p>
+        <p className="mt-3 text-center text-xs text-muted-foreground">
+          By Gergő Komáromi
         </p>
       </div>
     </div>
