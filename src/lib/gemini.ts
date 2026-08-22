@@ -10,7 +10,7 @@ if (!apiKey) {
 
 const ai = new GoogleGenAI({ apiKey: apiKey ?? "" });
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 
 /**
  * Strict response schema: an array of { front, back, language } objects.
