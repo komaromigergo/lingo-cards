@@ -3,23 +3,18 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Volume2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getGermanArticleBorderColor } from "@/lib/utils";
 
 export interface FlashcardViewerProps {
   front: string;
   back: string;
   frontLanguage?: string;
   backLanguage?: string;
-  /** Controlled flip state; if omitted, component manages its own state */
   flipped?: boolean;
   onFlip?: (flipped: boolean) => void;
   className?: string;
 }
 
-/**
- * A single flashcard that flips on click/tap, revealing the translation.
- * Uses a real 3D rotateY transform (not a fade) for the "physical card" feel.
- */
 export function FlashcardViewer({
   front,
   back,
@@ -33,7 +28,6 @@ export function FlashcardViewer({
   const isControlled = flippedProp !== undefined;
   const flipped = isControlled ? flippedProp : internalFlipped;
 
-  // Reset to front whenever the card content changes
   useEffect(() => {
     if (!isControlled) setInternalFlipped(false);
   }, [front, back, isControlled]);
@@ -52,6 +46,9 @@ export function FlashcardViewer({
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
   };
+
+  const frontArticleColor = frontLanguage === "de" ? getGermanArticleBorderColor(front) : null;
+  const backArticleColor = backLanguage === "de" ? getGermanArticleBorderColor(back) : null;
 
   return (
     <div className={cn("perspective-1000 w-full", className)}>
@@ -73,7 +70,10 @@ export function FlashcardViewer({
       >
         {/* FRONT */}
         <div
-          className="card-face absolute inset-0 flex flex-col items-center justify-center rounded-3xl border border-border bg-card p-8 text-center shadow-lg"
+          className={cn(
+            "card-face absolute inset-0 flex flex-col items-center justify-center rounded-3xl border border-border bg-card p-8 text-center shadow-lg",
+            frontArticleColor && `border-l-8 ${frontArticleColor}`
+          )}
           style={{ backfaceVisibility: "hidden" }}
         >
           <span className="absolute left-5 top-5 rounded-full bg-secondary px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -92,7 +92,10 @@ export function FlashcardViewer({
 
         {/* BACK */}
         <div
-          className="card-face absolute inset-0 flex flex-col items-center justify-center rounded-3xl border border-border bg-primary p-8 text-center shadow-lg"
+          className={cn(
+            "card-face absolute inset-0 flex flex-col items-center justify-center rounded-3xl border border-border bg-primary p-8 text-center shadow-lg",
+            backArticleColor && `border-l-8 ${backArticleColor}`
+          )}
           style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
         >
           <span className="absolute left-5 top-5 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-foreground">
