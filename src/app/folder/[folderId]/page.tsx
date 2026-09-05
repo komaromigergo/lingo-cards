@@ -153,7 +153,7 @@ export default function FolderPage() {
                     e.preventDefault();
                     void deleteDeck(deck.id);
                   }}
-                  className="absolute right-3 top-3 rounded-full bg-background/80 p-2 opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                  className="absolute right-3 top-3 rounded-full bg-background/80 p-2 opacity-60 transition-opacity hover:bg-destructive/10 hover:text-destructive hover:opacity-100"
                   aria-label="Delete deck"
                 >
                   <Trash2 className="h-4 w-4" />
