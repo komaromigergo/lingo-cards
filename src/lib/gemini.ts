@@ -3,8 +3,6 @@ import type { GeneratedCard, ImportMode } from "@/types";
 
 const apiKey = process.env.GEMINI_API_KEY;
 if (!apiKey) {
-  // Don't throw at import time in case this module is bundled client-side by mistake;
-  // callers will get a clear error the moment they try to use it.
   console.warn("[gemini] GEMINI_API_KEY is not set — imports will fail until it is configured.");
 }
 
@@ -14,8 +12,6 @@ const MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 
 /**
  * Strict response schema: an array of { front, back, language } objects.
- * Passed as `responseSchema` alongside responseMimeType "application/json"
- * so Gemini is constrained to emit only valid, parseable JSON.
  */
 const FLASHCARD_ARRAY_SCHEMA = {
   type: Type.ARRAY,
@@ -24,7 +20,7 @@ const FLASHCARD_ARRAY_SCHEMA = {
     properties: {
       front: {
         type: Type.STRING,
-        description: "The foreign-language word or phrase exactly as written in the source image.",
+        description: "The foreign-language word or phrase, corrected for OCR misreadings using dictionary knowledge where needed.",
       },
       back: {
         type: Type.STRING,
@@ -40,11 +36,32 @@ const FLASHCARD_ARRAY_SCHEMA = {
   },
 };
 
-/**
- * Option A — Vocabulary Notebook Import.
- * Photos of a hand/typed two-column notebook: left column = foreign word,
- * right column = translation. Missing translations must be auto-generated.
- */
+/** Shared rule block: German-specific article + plural formatting, common to both import modes. */
+const GERMAN_ARTICLE_RULES = `
+GERMAN NOUN FORMATTING (applies whenever a "front" entry is a German noun):
+- German nouns should always be output WITH their definite article ("der", "die", or "das") prepended, exactly as German dictionaries do.
+- If the source already writes an article before the noun (e.g. "das Auto"), keep it exactly as written.
+- If the source writes ONLY the bare noun with no article (e.g. just "Auto"), you must determine the grammatically correct article yourself from your own knowledge of German and prepend it (e.g. "Auto" → "das Auto"). Never leave a German noun without its article in "front".
+- If the source also includes a plural-formation marker after the noun, written with a leading hyphen (e.g. "das Auto -s", "der Tisch -e", "die Lampe -n"), preserve it exactly as written, in the same "article noun -suffix" structure. Do not drop it, merge it into the noun, or misinterpret it as a separate word.`;
+
+/** Shared rule block: cross-check OCR output against known-correct vocabulary and self-correct obvious misreadings. */
+function sanityCheckRule(bidirectional: boolean): string {
+  if (bidirectional) {
+    return `
+SANITY-CHECK / SELF-CORRECTION (very important):
+Do not treat OCR as infallible. After reading a "front"/"back" pair, use your own knowledge of both languages to check whether "back" is a real, correctly-spelled, plausible translation of "front" (and vice versa).
+- If your OCR reading of a handwritten word looks garbled, misspelled, or nonsensical (e.g. "pullohver"), but closely resembles — in sound or shape — the real, correctly-spelled known translation (e.g. "pulóver"), correct the spelling to the real word rather than reproducing the garbled OCR text literally.
+- Apply this check in BOTH directions: if "back" is garbled but "front" is clear, fix "back" using your knowledge of what "front" actually translates to; if "front" is garbled but "back" is clear, fix "front" the same way.
+- Only correct clear OCR noise/spelling artifacts where the corrected form is an obvious, close match — never replace a word with an unrelated word just because it seems more common.
+- Still prioritize what is actually written on the page; this is a targeted correction for OCR misreadings, not a license to freely rewrite content.`;
+  }
+  return `
+SANITY-CHECK / SELF-CORRECTION (important):
+Do not treat OCR as infallible. Use your own knowledge of the detected language to check whether the extracted "front" text is a real, correctly-spelled, plausible word or phrase.
+- If your OCR/reading of the marked text looks garbled or nonsensical, but closely resembles — in shape — a real, correctly-spelled word that fits the context of the surrounding sentence, correct the spelling to that real word rather than reproducing garbled text literally.
+- Only correct clear OCR noise where the corrected form is an obvious, close match — never guess wildly or substitute an unrelated word.`;
+}
+
 function buildNotebookPrompt(targetLanguage: string): string {
   return `You are an expert OCR and translation assistant for a language-learning app.
 
@@ -61,23 +78,20 @@ Your task:
   )} translation yourself and use it as "back". Never leave "back" empty.
 5. Ignore page numbers, dates, doodles, unrelated margin notes, and duplicate headers.
 6. If the same word appears more than once across pages, include it only once (skip duplicates).
-7. Preserve original spelling/diacritics of the foreign word exactly as written (umlauts, accents, etc.).
+7. Preserve original spelling/diacritics of the foreign word exactly as written (umlauts, accents, etc.) — except where corrected per the sanity-check rule below.
+${sanityCheckRule(true)}
+${GERMAN_ARTICLE_RULES}
 8. Output ONLY a JSON array matching the provided schema — no prose, no markdown fences, no explanations.`;
 }
 
-/**
- * Option B — Textbook Underline Import.
- * Photos of textbook pages; only words/phrases underlined or highlighted
- * in GREEN should be extracted, then translated.
- */
 function buildTextbookPrompt(targetLanguage: string): string {
   return `You are an expert OCR and translation assistant for a language-learning app.
 
 You will be shown one or more photos of textbook or reading pages. Some words or phrases on these pages have been marked by the student using a GREEN pen, GREEN highlighter, or GREEN underline.
 
 Your task:
-1. Scan every image carefully and identify ONLY the words or short phrases that are underlined, circled, or highlighted in GREEN color. Ignore markings in any other color (yellow, pink, blue, orange, red, etc.) and ignore all non-marked text.
-2. For each green-marked word or phrase, extract the exact text as "front", preserving original spelling, capitalization, and diacritics.
+1. Scan every image carefully and identify ONLY the words or short phrases that are underlined, circled, OR highlighted (marker/highlighter-style shading) in GREEN color. Both green underlining and green highlighter marking count equally — ignore markings in any other color (yellow, pink, blue, orange, red, etc.) and ignore all non-marked text.
+2. For each green-marked word or phrase, extract the exact text as "front", preserving original spelling, capitalization, and diacritics — except where corrected per the sanity-check rule below.
 3. Detect the language of the marked text and output its ISO 639-1 code (e.g. "de", "en", "fr") as "language".
 4. Generate an accurate ${targetLanguageName(
     targetLanguage
@@ -85,6 +99,8 @@ Your task:
 5. If a green mark spans a multi-word phrase or idiom, keep it together as one single "front" entry rather than splitting it into separate words.
 6. Skip any word that is marked in green but is illegible or ambiguous — do not guess wildly; only include entries you are reasonably confident about.
 7. If the same word/phrase is marked more than once across pages, include it only once (skip duplicates).
+${sanityCheckRule(false)}
+${GERMAN_ARTICLE_RULES}
 8. Output ONLY a JSON array matching the provided schema — no prose, no markdown fences, no explanations.`;
 }
 
@@ -102,13 +118,9 @@ function targetLanguageName(code: string): string {
 export interface GeminiImportInput {
   mode: ImportMode;
   images: { base64: string; mimeType: string }[];
-  targetLanguage?: string; // defaults to "hu" per spec (Hungarian translations)
+  targetLanguage?: string;
 }
 
-/**
- * Sends the uploaded photo(s) + the appropriate prompt to Gemini and returns
- * a parsed, validated array of GeneratedCard objects.
- */
 export async function generateFlashcardsFromImages(
   input: GeminiImportInput
 ): Promise<GeneratedCard[]> {
@@ -142,7 +154,7 @@ export async function generateFlashcardsFromImages(
     config: {
       responseMimeType: "application/json",
       responseSchema: FLASHCARD_ARRAY_SCHEMA,
-      temperature: 0.2, // low temperature: favor accurate OCR/translation over creativity
+      temperature: 0.2,
     },
   });
 
@@ -179,7 +191,6 @@ export async function generateFlashcardsFromImages(
       language: c.language.trim().toLowerCase(),
     }));
 
-  // De-duplicate by front+language, keeping first occurrence
   const seen = new Set<string>();
   return cards.filter((c) => {
     const key = `${c.front.toLowerCase()}::${c.language}`;
