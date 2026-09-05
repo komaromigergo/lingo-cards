@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence, PanInfo } from "framer-motion";
+import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from "framer-motion";
 import { Check, X, RotateCcw, PartyPopper, Repeat } from "lucide-react";
 import { FlashcardViewer } from "./FlashcardViewer";
 import { Button } from "@/components/ui/button";
@@ -13,13 +13,87 @@ export interface SwipeDeckProps {
   cards: StudyCard[];
   frontLanguage: string;
   backLanguage: string;
-  /** Which language shows on the front face: "front" = deck's frontLanguage, "back" = swap */
   displayDirection?: "front" | "back";
   onResolve?: (cardId: string, direction: SwipeDirection) => void;
   onSessionComplete?: (stats: { mastered: number; missed: number }) => void;
 }
 
 const SWIPE_THRESHOLD = 120;
+
+function SwipeCard({
+  cardId,
+  front,
+  back,
+  frontLanguage,
+  backLanguage,
+  flipped,
+  onFlip,
+  onSwipe,
+}: {
+  cardId: string;
+  front: string;
+  back: string;
+  frontLanguage: string;
+  backLanguage: string;
+  flipped: boolean;
+  onFlip: (flipped: boolean) => void;
+  onSwipe: (direction: SwipeDirection) => void;
+}) {
+  const x = useMotionValue(0);
+  const rotate = useTransform(x, [-200, 200], [-12, 12]);
+  const masteredOpacity = useTransform(x, [20, 120], [0, 1]);
+  const learningOpacity = useTransform(x, [-120, -20], [1, 0]);
+
+  const handleDragEnd = (_e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    if (info.offset.x > SWIPE_THRESHOLD) {
+      onSwipe("MASTERED");
+    } else if (info.offset.x < -SWIPE_THRESHOLD) {
+      onSwipe("LEARNING");
+    }
+  };
+
+  return (
+    <motion.div
+      key={cardId}
+      className="absolute inset-0"
+      style={{ x, rotate, touchAction: "none" }}
+      drag="x"
+      dragConstraints={{ left: 0, right: 0 }}
+      dragElastic={0.85}
+      dragTransition={{ bounceStiffness: 420, bounceDamping: 38 }}
+      dragMomentum={false}
+      onDragEnd={handleDragEnd}
+      initial={{ scale: 0.94, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      exit={{ opacity: 0, transition: { duration: 0.15 } }}
+      whileDrag={{ cursor: "grabbing" }}
+    >
+      {/* Overlay stamps that fade in as you drag */}
+      <motion.div
+        style={{ opacity: masteredOpacity }}
+        className="pointer-events-none absolute left-4 top-6 z-10 -rotate-12 rounded-lg border-4 border-success px-3 py-1 text-lg font-black uppercase tracking-wider text-success"
+      >
+        Mastered
+      </motion.div>
+      <motion.div
+        style={{ opacity: learningOpacity }}
+        className="pointer-events-none absolute right-4 top-6 z-10 rotate-12 rounded-lg border-4 border-destructive px-3 py-1 text-lg font-black uppercase tracking-wider text-destructive"
+      >
+        Learning
+      </motion.div>
+
+      <FlashcardViewer
+        front={front}
+        back={back}
+        frontLanguage={frontLanguage}
+        backLanguage={backLanguage}
+        flipped={flipped}
+        onFlip={onFlip}
+        className="h-full"
+      />
+    </motion.div>
+  );
+}
 
 export function SwipeDeck({
   cards,
@@ -44,7 +118,10 @@ export function SwipeDeck({
   } = useStudySession({ cards, onResolve });
 
   const [flipped, setFlipped] = useState(false);
-  const [exitDirection, setExitDirection] = useState<"left" | "right" | null>(null);
+
+  useEffect(() => {
+    setFlipped(false);
+  }, [current?.id]);
 
   useEffect(() => {
     if (sessionComplete) {
@@ -58,56 +135,53 @@ export function SwipeDeck({
   const displayBack = swap ? frontLanguage : backLanguage;
 
   const handleSwipe = (direction: SwipeDirection) => {
-    setExitDirection(direction === "MASTERED" ? "right" : "left");
     setFlipped(false);
-    setTimeout(() => {
-      resolveCurrent(direction);
-      setExitDirection(null);
-    }, 200);
-  };
-
-  const handleDragEnd = (_e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    if (info.offset.x > SWIPE_THRESHOLD) {
-      handleSwipe("MASTERED");
-    } else if (info.offset.x < -SWIPE_THRESHOLD) {
-      handleSwipe("LEARNING");
-    }
+    resolveCurrent(direction);
   };
 
   if (sessionComplete) {
-    const finished = round > 1 || !hasMissed;
     return (
-      <div className="mx-auto flex max-w-md flex-col items-center gap-6 rounded-3xl border border-border bg-card p-10 text-center shadow-lg">
-        <PartyPopper className="h-12 w-12 text-primary" />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3 }}
+        className="mx-auto flex w-full max-w-md flex-col items-center gap-5 rounded-3xl border border-border bg-card p-6 text-center shadow-lg sm:p-10"
+      >
+        <PartyPopper className="h-10 w-10 text-primary sm:h-12 sm:w-12" />
         <div>
-          <h3 className="text-2xl font-bold">Session complete!</h3>
-          <p className="mt-2 text-muted-foreground">
+          <h3 className="text-xl font-bold sm:text-2xl">Session complete!</h3>
+          <p className="mt-2 text-sm text-muted-foreground sm:text-base">
             {masteredCount} mastered · {missedCount} still learning
           </p>
         </div>
-        <div className="flex w-full flex-col gap-3 sm:flex-row">
+        <div className="flex w-full flex-col gap-2">
           {hasMissed && (
-            <Button className="flex-1" size="lg" onClick={repeatMissedOnly}>
+            <Button className="w-full" size="lg" onClick={repeatMissedOnly}>
               <Repeat className="mr-2 h-4 w-4" />
               Repeat missed ({missedCount})
             </Button>
           )}
-          <Button className="flex-1" size="lg" variant="outline" onClick={restartFullDeck}>
-            <RotateCcw className="mr-2 h-4 w-4" />
+          <Button
+            className="w-full text-muted-foreground"
+            size="sm"
+            variant="ghost"
+            onClick={restartFullDeck}
+          >
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
             Restart deck
           </Button>
         </div>
-        {finished && !hasMissed && (
+        {!hasMissed && (
           <p className="text-sm text-success">🎉 All cards mastered this round!</p>
         )}
-      </div>
+      </motion.div>
     );
   }
 
   if (!current) return null;
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-md flex-col gap-6 overscroll-none">
       <div className="flex items-center gap-3">
         <Progress value={progressPct} className="flex-1" />
         <span className="whitespace-nowrap text-sm font-medium text-muted-foreground">
@@ -115,35 +189,19 @@ export function SwipeDeck({
         </span>
       </div>
 
-      <div className="relative h-64 sm:h-80">
-        <AnimatePresence mode="popLayout">
-          <motion.div
+      <div className="relative h-64 overflow-visible sm:h-80">
+        <AnimatePresence mode="popLayout" initial={false}>
+          <SwipeCard
             key={current.id}
-            className="absolute inset-0"
-            drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.7}
-            onDragEnd={handleDragEnd}
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1, x: 0, rotate: 0 }}
-            exit={{
-              x: exitDirection === "right" ? 400 : exitDirection === "left" ? -400 : 0,
-              rotate: exitDirection === "right" ? 20 : exitDirection === "left" ? -20 : 0,
-              opacity: 0,
-              transition: { duration: 0.25 },
-            }}
-            whileDrag={{ cursor: "grabbing" }}
-          >
-            <FlashcardViewer
-              front={swap ? current.back : current.front}
-              back={swap ? current.front : current.back}
-              frontLanguage={displayFront}
-              backLanguage={displayBack}
-              flipped={flipped}
-              onFlip={setFlipped}
-              className="h-full"
-            />
-          </motion.div>
+            cardId={current.id}
+            front={swap ? current.back : current.front}
+            back={swap ? current.front : current.back}
+            frontLanguage={displayFront}
+            backLanguage={displayBack}
+            flipped={flipped}
+            onFlip={setFlipped}
+            onSwipe={handleSwipe}
+          />
         </AnimatePresence>
       </div>
 
