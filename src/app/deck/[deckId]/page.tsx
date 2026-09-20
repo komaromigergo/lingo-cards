@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, GraduationCap, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, GraduationCap, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ImportDialog } from "@/components/upload/ImportDialog";
+import { exportDeckToExcel } from "@/lib/export";
 
 interface CardItem {
   id: string;
@@ -127,6 +128,16 @@ export default function DeckPage() {
                 <Button variant="outline" onClick={() => setImportOpen(true)}>
                   <Sparkles className="mr-1.5 h-4 w-4" />
                   Smart import
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={cards.length === 0}
+                  onClick={() =>
+                    exportDeckToExcel(deck.title, deck.frontLanguage, deck.backLanguage, cards)
+                  }
+                >
+                  <Download className="mr-1.5 h-4 w-4" />
+                  Export Excel
                 </Button>
                 <Button asChild disabled={cards.length === 0}>
                   <Link href={`/study/${deck.id}`}>
